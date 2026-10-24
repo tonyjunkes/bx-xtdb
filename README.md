@@ -1,12 +1,12 @@
 # bx-xtdb
 
 Use XTDB through BoxLang's native datasources, `queryExecute()`, `bx:query`, and
-`bx:transaction`. Requires **BoxLang 1.18+ and Java 21+**. The initial tested server
-and official JDBC driver are **XTDB 2.2.0**.
+`bx:transaction`. Requires **BoxLang 1.18+ and Java 21+**. Connects to **XTDB 2.2.0**
+using the official XTDB JDBC driver.
 
 ## Install
 
-After publication, install the compiled module from ForgeBox:
+Install the module from ForgeBox:
 
 ```sh
 box install bx-xtdb
