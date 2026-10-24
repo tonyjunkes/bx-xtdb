@@ -49,7 +49,9 @@ public class XTDBDriver extends GenericJDBCDriver {
     @Override
     public Object transformValue(int sqlType, Object value, BoxStatement statement) {
         // PostgreSQL reports bool as BIT; the generic adapter converts BIT to 0/1.
-        if (value instanceof Boolean) return value;
+        if (value instanceof Boolean) {
+            return value;
+        }
         return XTDBValues.toBoxLang(super.transformValue(sqlType, value, statement));
     }
 

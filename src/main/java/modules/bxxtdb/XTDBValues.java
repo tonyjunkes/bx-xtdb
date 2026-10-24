@@ -18,7 +18,8 @@ import ortus.boxlang.runtime.types.Struct;
 
 /** Lossless conversions at the BoxLang/XTDB value interface. */
 final class XTDBValues {
-    private XTDBValues() {}
+    private XTDBValues() {
+    }
 
     static void initializeSerializer() {
         Thread thread = Thread.currentThread();
@@ -34,8 +35,12 @@ final class XTDBValues {
     }
 
     static Object toBoxLang(Object value) {
-        if (value instanceof ZonedDateTime date) return new DateTime(date);
-        if (value instanceof OffsetDateTime date) return new DateTime(date);
+        if (value instanceof ZonedDateTime date) {
+            return new DateTime(date);
+        }
+        if (value instanceof OffsetDateTime date) {
+            return new DateTime(date);
+        }
         if (value instanceof Map<?, ?> map && map.keySet().stream().allMatch(String.class::isInstance)) {
             var result = new Struct(Struct.TYPES.LINKED_CASE_SENSITIVE);
             map.forEach((key, item) -> result.put((String) key, toBoxLang(item)));
@@ -48,7 +53,9 @@ final class XTDBValues {
         }
         if (value instanceof Object[] array) {
             var result = new Array();
-            for (Object item : array) result.add(toBoxLang(item));
+            for (Object item : array) {
+                result.add(toBoxLang(item));
+            }
             return result;
         }
         return value;
@@ -59,9 +66,13 @@ final class XTDBValues {
     }
 
     private static Object toJdbc(Object value, IdentityHashMap<Object, Boolean> active) {
-        if (value instanceof DateTime date) return date.getWrapped();
+        if (value instanceof DateTime date) {
+            return date.getWrapped();
+        }
         boolean collection = value instanceof Map || value instanceof List || value instanceof Set || value instanceof Object[];
-        if (!collection) return value;
+        if (!collection) {
+            return value;
+        }
         if (active.put(value, true) != null) {
             throw new IllegalArgumentException("Cyclic collections cannot be bound as XTDB parameters");
         }
@@ -69,7 +80,9 @@ final class XTDBValues {
             if (value instanceof IStruct struct) {
                 var result = new LinkedHashMap<String, Object>();
                 // get() unwraps BoxLang's internal null sentinel.
-                for (var key : struct.keySet()) result.put(key.getName(), toJdbc(struct.get(key), active));
+                for (var key : struct.keySet()) {
+                    result.put(key.getName(), toJdbc(struct.get(key), active));
+                }
                 return result;
             }
             if (value instanceof Map<?, ?> map) {
@@ -86,7 +99,9 @@ final class XTDBValues {
             if (value instanceof List<?> list) {
                 list.forEach(item -> result.add(toJdbc(item, active)));
             } else {
-                for (Object item : (Object[]) value) result.add(toJdbc(item, active));
+                for (Object item : (Object[]) value) {
+                    result.add(toJdbc(item, active));
+                }
             }
             return result;
         } finally {

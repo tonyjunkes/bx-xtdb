@@ -27,7 +27,8 @@ import ortus.boxlang.runtime.types.Struct;
 class XTDBValuesTest {
     private final XTDBDriver driver = new XTDBDriver();
 
-    @Test void convertsNestedRecordsWithoutCollapsingCaseOrNulls() {
+    @Test
+    void convertsNestedRecordsWithoutCollapsingCaseOrNulls() {
         var input = new LinkedHashMap<String, Object>();
         input.put("Name", Arrays.asList(null, true));
         input.put("name", Map.of("amount", new BigDecimal("12345678901234567890.123456789")));
@@ -39,23 +40,29 @@ class XTDBValuesTest {
         assertEquals(new BigDecimal("12345678901234567890.123456789"), result.getAsStruct(Key.of("name")).get("amount"));
     }
 
-    @Test void preservesSpecializedValuesAndBooleans() {
+    @Test
+    void preservesSpecializedValuesAndBooleans() {
         for (Object value : List.of(LocalDate.now(), LocalTime.now(), LocalDateTime.now(), UUID.randomUUID(),
-                Set.of("x"), new byte[] {1, 2}, Map.of(1, "non-string key"))) {
+                Set.of("x"), new byte[] {
+                    1,
+                    2
+                }, Map.of(1, "non-string key"))) {
             assertSame(value, driver.transformValue(Types.OTHER, value, null));
         }
         assertEquals(true, driver.transformValue(Types.BIT, true, null));
         assertNull(driver.transformValue(Types.OTHER, null, null));
     }
 
-    @Test void roundTripsZonedTimestampsWithoutTruncation() {
+    @Test
+    void roundTripsZonedTimestampsWithoutTruncation() {
         var date = ZonedDateTime.parse("2026-01-02T03:04:05.123456789+01:00[Europe/Paris]");
         var result = (DateTime) driver.transformValue(Types.TIMESTAMP_WITH_TIMEZONE, date, null);
         assertEquals(date, result.getWrapped());
         assertEquals(date, driver.transformParamValue(QueryColumnType.OTHER, result, null, null));
     }
 
-    @Test void copiesBoxLangCollectionsAndUnwrapsKeysAndNulls() {
+    @Test
+    void copiesBoxLangCollectionsAndUnwrapsKeysAndNulls() {
         var list = Array.of(1, null, new DateTime(ZonedDateTime.parse("2026-01-01T00:00Z")));
         IStruct input = Struct.of("Items", list);
         var result = (Map<?, ?>) driver.transformParamValue(QueryColumnType.OTHER, input, null, null);
@@ -68,7 +75,8 @@ class XTDBValuesTest {
         assertNotSame(list, copy);
     }
 
-    @Test void rejectsCyclesButAllowsSharedChildren() {
+    @Test
+    void rejectsCyclesButAllowsSharedChildren() {
         var child = new ArrayList<Object>();
         child.add(1);
         assertEquals(List.of(List.of(1), List.of(1)), XTDBValues.toJdbc(List.of(child, child)));
