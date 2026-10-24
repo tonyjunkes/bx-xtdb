@@ -5,4 +5,3 @@ boxlang_modules/
 .boxlang/
 .env
 .DS_Store
-__pycache__/

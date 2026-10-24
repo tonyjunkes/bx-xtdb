@@ -12,6 +12,10 @@ concurrency:
   group: release-main
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   checks:
     if: github.ref == 'refs/heads/main'
@@ -24,6 +28,9 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,9 +39,139 @@ jobs:
         with:
           name: bx-xtdb-distribution
           path: build/distributions
-      - uses: Ortus-Solutions/setup-commandbox@v2.0.1
-      - name: Publish the verified distribution
+
+      - name: Inspect release version and immutable tag
+        id: release
+        run: |
+          # BEGIN release-state
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          version="$(jq -er '.version | select(type == "string" and test("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"))' box.json)"
+          slug="$(jq -er '.slug | select(. == "bx-xtdb")' box.json)"
+          {
+            echo "version=$version"
+            echo "slug=$slug"
+            echo "archive=$slug-$version.zip"
+          } >> "$GITHUB_OUTPUT"
+          if [[ -n "$(git tag --list "$version")" ]]; then
+            tagged="$(git rev-list -n 1 "$version")"
+            if [[ "$tagged" != "$GITHUB_SHA" ]]; then
+              git merge-base --is-ancestor "$tagged" "$GITHUB_SHA"
+              echo "Version $version was already tagged on an earlier main commit; skipping."
+              echo 'publish=false' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo 'publish=true' >> "$GITHUB_OUTPUT"
+          # END release-state
+
+      - name: Verify distribution and publication state
+        id: package
+        if: steps.release.outputs.publish == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs.version }}
+          SLUG: ${{ steps.release.outputs.slug }}
+          ARCHIVE: ${{ steps.release.outputs.archive }}
           FORGEBOX_API_TOKEN: ${{ secrets.FORGEBOX_API_TOKEN }}
-        run: python3 scripts/release.py
+        run: |
+          # BEGIN release-package
+          (
+            cd build/distributions
+            [[ "$(cat "$ARCHIVE.sha256")" == "$(sha256sum "$ARCHIVE")" ]]
+          )
+          archive_path="$GITHUB_WORKSPACE/build/distributions/$ARCHIVE"
+          unzip -Z1 "$archive_path" > "$RUNNER_TEMP/bx-xtdb-contents.txt"
+          if grep -Eq '(^/|(^|/)\.\.(/|$))' "$RUNNER_TEMP/bx-xtdb-contents.txt"; then
+            echo 'Unsafe path in distribution' >&2
+            exit 1
+          fi
+          package_dir="$(mktemp -d "$RUNNER_TEMP/bx-xtdb-package.XXXXXX")"
+          unzip -q "$archive_path" -d "$package_dir"
+          cmp box.json "$package_dir/box.json"
+          cmp src/main/bx/ModuleConfig.bx "$package_dir/ModuleConfig.bx"
+          test -s "$package_dir/libs/$SLUG-$VERSION.jar"
+          expected_location="https://github.com/$GH_REPO/releases/download/$VERSION/$ARCHIVE"
+          jq -e --arg expected "$expected_location" '.location == $expected' "$package_dir/box.json" >/dev/null
+
+          status="$(curl --silent --show-error --location --max-time 30 \
+            --output "$RUNNER_TEMP/forgebox-entry.json" --write-out '%{http_code}' \
+            "https://www.forgebox.io/api/v1/entry/$SLUG")"
+          case "$status" in
+            200)
+              jq -e '.error == false and (.data.versions | type == "array")' "$RUNNER_TEMP/forgebox-entry.json" >/dev/null
+              published="$(jq --arg version "$VERSION" 'any(.data.versions[]; .version == $version)' "$RUNNER_TEMP/forgebox-entry.json")"
+              ;;
+            404) published=false ;;
+            *) echo "ForgeBox returned HTTP $status; stopping publication" >&2; exit 1 ;;
+          esac
+          if [[ "$published" == false && -z "${FORGEBOX_API_TOKEN:-}" ]]; then
+            echo 'Add FORGEBOX_API_TOKEN before releasing' >&2
+            exit 1
+          fi
+          gh release list --limit 1000 --json tagName,isDraft > "$RUNNER_TEMP/bx-xtdb-releases.json"
+          {
+            echo "package-dir=$package_dir"
+            echo "forgebox-published=$published"
+            echo "github-exists=$(jq --arg version "$VERSION" 'any(.[]; .tagName == $version)' "$RUNNER_TEMP/bx-xtdb-releases.json")"
+            echo "github-draft=$(jq --arg version "$VERSION" '[.[] | select(.tagName == $version) | .isDraft][0] // false' "$RUNNER_TEMP/bx-xtdb-releases.json")"
+          } >> "$GITHUB_OUTPUT"
+          # END release-package
+
+      - uses: Ortus-Solutions/setup-commandbox@v2.0.1
+        if: steps.release.outputs.publish == 'true' && steps.package.outputs.forgebox-published == 'false'
+
+      - name: Tag and publish verified GitHub assets
+        if: steps.release.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          SLUG: ${{ steps.release.outputs.slug }}
+          ARCHIVE: ${{ steps.release.outputs.archive }}
+          RELEASE_EXISTS: ${{ steps.package.outputs.github-exists }}
+          RELEASE_DRAFT: ${{ steps.package.outputs.github-draft }}
+        run: |
+          # BEGIN release-github
+          if [[ -z "$(git tag --list "$VERSION")" ]]; then
+            git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              tag --annotate "$VERSION" --message "Release $VERSION" "$GITHUB_SHA"
+            git push origin "refs/tags/$VERSION"
+          else
+            [[ "$(git rev-list -n 1 "$VERSION")" == "$GITHUB_SHA" ]]
+          fi
+          if [[ "$RELEASE_EXISTS" == false ]]; then
+            flags=()
+            if [[ "$VERSION" == *-* ]]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$VERSION" --verify-tag --draft \
+              --title "$SLUG $VERSION" --generate-notes "${flags[@]}"
+          fi
+          gh release view "$VERSION" --json assets > "$RUNNER_TEMP/bx-xtdb-assets.json"
+          existing_dir="$(mktemp -d "$RUNNER_TEMP/bx-xtdb-existing.XXXXXX")"
+          for asset in "$ARCHIVE" "$ARCHIVE.sha256"; do
+            if jq -e --arg name "$asset" 'any(.assets[]; .name == $name)' "$RUNNER_TEMP/bx-xtdb-assets.json" >/dev/null; then
+              gh release download "$VERSION" --pattern "$asset" --dir "$existing_dir"
+              if ! cmp -s "build/distributions/$asset" "$existing_dir/$asset"; then
+                echo "Existing release asset differs: $asset; refusing to replace it" >&2
+                exit 1
+              fi
+            else
+              gh release upload "$VERSION" "build/distributions/$asset"
+            fi
+          done
+          if [[ "$RELEASE_EXISTS" == false || "$RELEASE_DRAFT" == true ]]; then
+            gh release edit "$VERSION" --draft=false
+          fi
+          # END release-github
+
+      - name: Publish the compiled package to ForgeBox
+        if: steps.release.outputs.publish == 'true' && steps.package.outputs.forgebox-published == 'false'
+        env:
+          PACKAGE_DIR: ${{ steps.package.outputs.package-dir }}
+          FORGEBOX_API_TOKEN: ${{ secrets.FORGEBOX_API_TOKEN }}
+        run: |
+          # BEGIN release-forgebox
+          box config set "endpoints.forgebox.APIToken=$FORGEBOX_API_TOKEN" > /dev/null
+          box forgebox publish "directory=$PACKAGE_DIR"
+          # END release-forgebox

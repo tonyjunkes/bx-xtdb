@@ -27,10 +27,12 @@ or a failed ForgeBox publication. Existing assets must match the tested artifact
 byte for byte; they are never replaced. An already-published ForgeBox version is
 not republished. Releasing an intentionally changed package requires a new version.
 
-Release-recovery tests run without credentials or network access:
+Release steps live directly in `.github/workflows/release.yml`, using Bash,
+`jq`, `gh`, and CommandBox. Release-recovery tests execute those workflow blocks
+with fake external commands, without credentials or network access:
 
 ```sh
-python3 -m unittest discover -s tests/ci
+bash tests/ci/release-workflow-test.sh
 ```
 
 Publishing is performed by GitHub Actions after merge. Opening these PRs does

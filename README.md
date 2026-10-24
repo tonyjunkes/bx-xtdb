@@ -141,7 +141,7 @@ Then, from this checkout:
 box install
 bash scripts/xtdb.sh start
 ./gradlew build consumerTest runtimeConsumerTest testBox exampleTest
-python3 -m unittest discover -s tests/ci
+bash tests/ci/release-workflow-test.sh
 bash scripts/xtdb.sh stop
 ```
 
