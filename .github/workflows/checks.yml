@@ -80,7 +80,7 @@ jobs:
         run: |
           boxlang --bx-home build/consumer/home --bx-config src/test/bx/boxlang.json testbox/system/runners/BoxLangRunner.bx \
             --directory=src.test.bx.specs --stream --write-report=true --write-json-report=true \
-            --reportpath=build/testbox --properties-summary=false --stacktrace=short
+            --reportpath="$GITHUB_WORKSPACE/build/testbox" --properties-summary=false --stacktrace=short
           jq -e '.totalFail == 0 and .totalError == 0 and .totalPass > 0' build/testbox/report.json
       - name: Collect container logs
         if: always()
