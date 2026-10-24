@@ -1,0 +1,5 @@
+id = createUUID();
+queryExecute("INSERT INTO bxxtdb_smoke (_id, name) VALUES (?, ?)", [id, "BoxLang"]);
+rows = queryExecute("SELECT name FROM bxxtdb_smoke WHERE _id = :id", {id: id});
+if (rows.recordCount != 1 || rows.name[1] != "BoxLang") throw "Packaged XTDB query failed";
+println("Packaged XTDB connection, binding, write and read passed");

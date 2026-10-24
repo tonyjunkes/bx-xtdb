@@ -1,0 +1,7 @@
+.gradle/
+build/
+testbox/
+boxlang_modules/
+.boxlang/
+.env
+.DS_Store
