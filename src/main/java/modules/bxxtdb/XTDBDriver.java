@@ -28,9 +28,13 @@ public class XTDBDriver extends GenericJDBCDriver {
             throw new IllegalArgumentException("The database property is required for the XTDB JDBC driver");
         }
         String host = config.properties.getOrDefault(Key.host, defaultHost).toString();
-        if (host.isBlank()) host = defaultHost;
+        if (host.isBlank()) {
+            host = defaultHost;
+        }
         String port = config.properties.getOrDefault(Key.port, defaultPort).toString();
-        if (port.isBlank() || port.equals("0")) port = defaultPort;
+        if (port.isBlank() || port.equals("0")) {
+            port = defaultPort;
+        }
         String params = customParamsToQueryString(config);
         return "jdbc:xtdb://" + host + ":" + port + "/"
             + URLEncoder.encode(database, StandardCharsets.UTF_8).replace("+", "%20")
@@ -45,7 +49,9 @@ public class XTDBDriver extends GenericJDBCDriver {
     @Override
     public Object transformValue(int sqlType, Object value, BoxStatement statement) {
         // PostgreSQL reports bool as BIT; the generic adapter converts BIT to 0/1.
-        if (value instanceof Boolean) return value;
+        if (value instanceof Boolean) {
+            return value;
+        }
         return XTDBValues.toBoxLang(super.transformValue(sqlType, value, statement));
     }
 

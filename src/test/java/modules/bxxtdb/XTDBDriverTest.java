@@ -16,7 +16,8 @@ class XTDBDriverTest {
         return config;
     }
 
-    @Test void buildsDefaultAndConfiguredUrls() {
+    @Test
+    void buildsDefaultAndConfiguredUrls() {
         assertEquals("jdbc:xtdb://localhost:5432/xtdb", driver.buildConnectionURL(config(Struct.of("database", "xtdb"))));
         assertEquals("jdbc:xtdb://db.example:6432/my%20db?sslmode=verify-full",
             driver.buildConnectionURL(config(Struct.of("database", "my db", "host", "db.example", "port", 6432,
@@ -25,7 +26,8 @@ class XTDBDriverTest {
             Struct.of("database", "xtdb", "host", "", "port", 0))));
     }
 
-    @Test void requiresDatabaseOnlyWhenBuildingUrl() {
+    @Test
+    void requiresDatabaseOnlyWhenBuildingUrl() {
         assertThrows(IllegalArgumentException.class, () -> driver.buildConnectionURL(config(Struct.of())));
         assertThrows(IllegalArgumentException.class, () -> driver.buildConnectionURL(config(Struct.of("database", " "))));
     }

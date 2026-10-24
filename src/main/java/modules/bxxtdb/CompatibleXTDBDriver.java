@@ -21,12 +21,20 @@ public final class CompatibleXTDBDriver implements Driver {
 
     @Override
     public Connection connect(String url, Properties properties) throws SQLException {
-        if (!acceptsURL(url)) return null;
+        if (!acceptsURL(url)) {
+            return null;
+        }
         Connection connection = delegate.connect(url, properties);
-        if (connection == null) return null;
-        return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[] {Connection.class},
+        if (connection == null) {
+            return null;
+        }
+        return (Connection) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[] {
+                Connection.class
+            },
             (proxy, method, args) -> {
-                if (method.getName().equals("equals")) return proxy == args[0];
+                if (method.getName().equals("equals")) {
+                    return proxy == args[0];
+                }
                 Object result = invoke(method, connection, args);
                 if (method.getName().equals("createStatement") && result instanceof Statement statement) {
                     return wrapStatement(statement, (Connection) proxy);
@@ -36,13 +44,19 @@ public final class CompatibleXTDBDriver implements Driver {
     }
 
     private Statement wrapStatement(Statement statement, Connection connection) {
-        return (Statement) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[] {Statement.class},
+        return (Statement) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[] {
+                Statement.class
+            },
             (proxy, method, args) -> {
-                if (method.getName().equals("equals")) return proxy == args[0];
+                if (method.getName().equals("equals")) {
+                    return proxy == args[0];
+                }
                 if (method.getName().equals("getResultSet") && statement.unwrap(Statement.class).getResultSet() == null) {
                     return null;
                 }
-                if (method.getName().equals("getConnection")) return connection;
+                if (method.getName().equals("getConnection")) {
+                    return connection;
+                }
                 return invoke(method, statement, args);
             });
     }
@@ -55,12 +69,32 @@ public final class CompatibleXTDBDriver implements Driver {
         }
     }
 
-    @Override public boolean acceptsURL(String url) { return url != null && url.startsWith("jdbc:xtdb:"); }
-    @Override public DriverPropertyInfo[] getPropertyInfo(String url, Properties properties) throws SQLException {
+    @Override
+    public boolean acceptsURL(String url) {
+        return url != null && url.startsWith("jdbc:xtdb:");
+    }
+
+    @Override
+    public DriverPropertyInfo[] getPropertyInfo(String url, Properties properties) throws SQLException {
         return delegate.getPropertyInfo(url, properties);
     }
-    @Override public int getMajorVersion() { return delegate.getMajorVersion(); }
-    @Override public int getMinorVersion() { return delegate.getMinorVersion(); }
-    @Override public boolean jdbcCompliant() { return delegate.jdbcCompliant(); }
-    @Override public Logger getParentLogger() { return Logger.getLogger("modules.bxxtdb"); }
+    @Override
+    public int getMajorVersion() {
+        return delegate.getMajorVersion();
+    }
+
+    @Override
+    public int getMinorVersion() {
+        return delegate.getMinorVersion();
+    }
+
+    @Override
+    public boolean jdbcCompliant() {
+        return delegate.jdbcCompliant();
+    }
+
+    @Override
+    public Logger getParentLogger() {
+        return Logger.getLogger("modules.bxxtdb");
+    }
 }
