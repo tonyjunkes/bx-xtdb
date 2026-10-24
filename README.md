@@ -141,7 +141,6 @@ Then, from this checkout:
 box install
 bash scripts/xtdb.sh start
 ./gradlew build consumerTest runtimeConsumerTest testBox exampleTest
-bash tests/ci/release-workflow-test.sh
 bash scripts/xtdb.sh stop
 ```
 
@@ -162,23 +161,11 @@ coexistence. Consumer processes expose only the BoxLang runtime on their outer
 classpath. Test reports are under `build/reports/tests/` and `build/testbox/`.
 The build creates the compiled ZIP and SHA-256 checksum in `build/distributions/`.
 
-## Compatibility and releases
+## Compatibility
 
-CI builds once and tests that distribution on BoxLang 1.18.0, latest stable, and
-snapshot. All must pass. XTDB 1.x, older XTDB 2.x releases, embedded nodes,
-Arrow/ADBC, and complete PostgreSQL compatibility are outside this release's
-support contract.
-
-The module initializes XTDB's Clojure serializer with its module classloader and
-restores the caller's context classloader afterward. A small internal JDBC
-wrapper guards XTDB 2.2.0's plain-statement null-result-set bug, preserving
-database diagnostics while keeping XTDB's value decoding. Re-evaluate that
-wrapper when upgrading the upstream driver.
-
-Update `box.json`, `gradle.properties`, `ModuleConfig.bx`, and the manifest's
-release ZIP URL together. Runtime dependencies are locked in `gradle.lockfile`;
-update deliberately with `./gradlew dependencies --configuration runtimeClasspath --write-locks`.
-See [release operation](docs/releases.md) before merging a release version.
+This module supports BoxLang 1.18+ with XTDB 2.2.0. XTDB 1.x, older XTDB 2.x
+releases, embedded nodes, Arrow/ADBC, and complete PostgreSQL compatibility are
+outside the current support contract.
 
 References: [XTDB Java driver](https://docs.xtdb.com/drivers/java.html),
 [BoxLang module development](https://boxlang.ortusbooks.com/boxlang-framework/module-development/getting-started).

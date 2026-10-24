@@ -6,4 +6,4 @@
 - Lossless nested document, list, and zoned timestamp conversion.
 - JDBC compatibility for absent plain-statement result sets and isolated Clojure serialization.
 - Packaged application/runtime consumers, temporal examples, and real-XTDB transaction tests.
-- Reproducible distribution with locked dependencies and verified GitHub/ForgeBox release recovery.
+- Installable distribution with the required JDBC dependencies included.
