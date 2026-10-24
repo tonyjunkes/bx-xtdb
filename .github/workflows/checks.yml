@@ -24,6 +24,10 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
+      - name: Verify release recovery and script syntax
+        run: |
+          python3 -m unittest discover -s tests/ci
+          bash -n scripts/xtdb.sh
       - name: Build, test adapter logic, and validate metadata
         run: ./gradlew build
       - uses: actions/upload-artifact@v7
@@ -76,6 +80,7 @@ jobs:
         run: |
           boxlang --bx-home build/consumer/home --bx-config src/test/bx/boxlang.json src/test/bx/Smoke.bxs
           boxlang --bx-home build/runtime-consumer/home --bx-config src/test/runtime/boxlang.json src/test/runtime/Smoke.bxs
+          boxlang --bx-home build/example/home --bx-config src/test/bx/boxlang.json examples/Temporal.bxs
       - name: Run TestBox and check actual report totals
         run: |
           boxlang --bx-home build/consumer/home --bx-config src/test/bx/boxlang.json testbox/system/runners/BoxLangRunner.bx \

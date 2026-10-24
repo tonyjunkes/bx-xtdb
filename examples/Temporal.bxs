@@ -1,0 +1,35 @@
+// Run against a disposable development node; creates uniquely identified example data.
+id = createUUID();
+queryExecute(
+    "INSERT INTO bxxtdb_example (_id, name, _valid_from, _valid_to)
+     VALUES (?, ?, TIMESTAMP '2020-01-01Z', TIMESTAMP '2021-01-01Z')",
+    [id, "Original"]
+);
+recorded = queryExecute(
+    "SELECT _system_from AS recorded FROM bxxtdb_example FOR ALL VALID_TIME WHERE _id = ?",
+    [id]
+).recorded[1];
+
+bx:transaction {
+    queryExecute("ASSERT EXISTS (SELECT 1 FROM bxxtdb_example FOR ALL VALID_TIME WHERE _id = ?)", [id]);
+    queryExecute(
+        "UPDATE bxxtdb_example FOR VALID_TIME FROM TIMESTAMP '2020-01-01Z'
+         TO TIMESTAMP '2021-01-01Z' SET name = ? WHERE _id = ?",
+        ["Corrected", id]
+    );
+}
+
+corrected = queryExecute(
+    "SELECT name FROM bxxtdb_example FOR VALID_TIME AS OF CAST(? AS TIMESTAMPTZ) WHERE _id = ?",
+    ["2020-06-01T00:00:00Z", id]
+);
+original = queryExecute(
+    "SELECT name FROM bxxtdb_example FOR SYSTEM_TIME AS OF CAST(? AS TIMESTAMPTZ)
+     FOR VALID_TIME AS OF TIMESTAMP '2020-06-01Z' WHERE _id = ?",
+    [{value: recorded, sqltype: "other"}, id]
+);
+if (corrected.name[1] != "Corrected" || original.name[1] != "Original") {
+    throw "Temporal example did not preserve history";
+}
+println("Current correction: " & corrected.name[1]);
+println("Previously recorded version: " & original.name[1]);

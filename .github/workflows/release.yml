@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/checks.yml
+
+  publish:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: bx-xtdb-distribution
+          path: build/distributions
+      - uses: Ortus-Solutions/setup-commandbox@v2.0.1
+      - name: Publish the verified distribution
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORGEBOX_API_TOKEN: ${{ secrets.FORGEBOX_API_TOKEN }}
+        run: python3 scripts/release.py

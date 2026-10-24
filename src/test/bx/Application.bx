@@ -8,4 +8,7 @@ class {
         maxConnections: 3
     };
     this.datasource = "xtdb";
+    // A distinct pool proves visibility after synchronous commit across connections.
+    this.datasources.xtdbReader = duplicate(this.datasources.xtdb);
+    this.datasources.xtdbReader.maxConnections = 1;
 }
