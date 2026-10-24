@@ -1,0 +1,97 @@
+name: Module checks
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build, test adapter logic, and validate metadata
+        run: ./gradlew build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bx-xtdb-distribution
+          path: |
+            build/distributions/*.zip
+            build/distributions/*.zip.sha256
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: junit-reports
+          path: build/reports/tests/
+
+  boxlang:
+    name: BoxLang ${{ matrix.boxlang-version }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        boxlang-version: ['1.18.0', latest, snapshot]
+    env:
+      XTDB_USER: xtdb
+      XTDB_PASSWORD: xtdb
+      XTDB_JDBC_URL: jdbc:xtdb://localhost:5432/xtdb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ortus-boxlang/setup-boxlang@main
+        with:
+          version: ${{ matrix.boxlang-version }}
+          with-commandbox: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: bx-xtdb-distribution
+          path: build/distributions
+      - name: Install development dependencies and the tested ZIP
+        run: |
+          box install
+          version="$(jq -er '.version' box.json)"
+          (cd build/distributions && sha256sum --check "bx-xtdb-$version.zip.sha256")
+          box install "ID=build/distributions/bx-xtdb-$version.zip" directory=build/consumer/modules production=true save=false
+      - name: Start disposable XTDB
+        run: bash scripts/xtdb.sh start
+      - name: Verify installed consumer
+        run: |
+          boxlang --bx-home build/consumer/home --bx-config src/test/bx/boxlang.json src/test/bx/Smoke.bxs
+          boxlang --bx-home build/runtime-consumer/home --bx-config src/test/runtime/boxlang.json src/test/runtime/Smoke.bxs
+      - name: Run TestBox and check actual report totals
+        run: |
+          boxlang --bx-home build/consumer/home --bx-config src/test/bx/boxlang.json testbox/system/runners/BoxLangRunner.bx \
+            --directory=src.test.bx.specs --stream --write-report=true --write-json-report=true \
+            --reportpath=build/testbox --properties-summary=false --stacktrace=short
+          jq -e '.totalFail == 0 and .totalError == 0 and .totalPass > 0' build/testbox/report.json
+      - name: Collect container logs
+        if: always()
+        run: bash scripts/xtdb.sh logs > build/xtdb.log 2>&1 || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: integration-${{ matrix.boxlang-version }}
+          path: |
+            build/testbox/
+            build/xtdb.log
+      - name: Remove disposable XTDB
+        if: always()
+        run: bash scripts/xtdb.sh stop

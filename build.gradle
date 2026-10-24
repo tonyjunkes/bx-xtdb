@@ -2,11 +2,15 @@ plugins { id 'java-library' }
 
 group = 'modules.bxxtdb'
 repositories { mavenCentral() }
+configurations.runtimeClasspath.resolutionStrategy.activateDependencyLocking()
 
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 
 dependencies {
     compileOnly "io.boxlang:boxlang:${boxlangVersion}"
+    // Already supplied at runtime by xtdb-api; needed to initialize its serializer.
+    compileOnly 'org.clojure:clojure:1.12.0'
+    compileOnly 'org.postgresql:postgresql:42.7.10'
     implementation "com.xtdb:xtdb-api:${xtdbVersion}"
     testImplementation "io.boxlang:boxlang:${boxlangVersion}"
     testImplementation 'org.junit.jupiter:junit-jupiter:5.14.0'
@@ -84,6 +88,15 @@ tasks.register('consumerTest', JavaExec) {
     args '--bx-home', file('build/consumer/home').absolutePath,
         '--bx-config', file('src/test/bx/boxlang.json').absolutePath,
         file('src/test/bx/Smoke.bxs').absolutePath
+}
+tasks.register('runtimeConsumerTest', JavaExec) {
+    dependsOn prepareConsumer
+    classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
+    mainClass = 'ortus.boxlang.runtime.BoxRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args '--bx-home', file('build/runtime-consumer/home').absolutePath,
+        '--bx-config', file('src/test/runtime/boxlang.json').absolutePath,
+        file('src/test/runtime/Smoke.bxs').absolutePath
 }
 tasks.register('testBox', JavaExec) {
     dependsOn prepareConsumer
