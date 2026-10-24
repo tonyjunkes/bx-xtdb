@@ -21,6 +21,7 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
 }
+
 tasks.withType(AbstractArchiveTask).configureEach {
     preserveFileTimestamps = false
     reproducibleFileOrder = true
@@ -51,12 +52,14 @@ tasks.register('createModuleStructure', Sync) {
     from('examples') { into 'examples' }
     from('.') { include 'box.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md' }
 }
+
 tasks.register('moduleZip', Zip) {
     dependsOn createModuleStructure
     from(layout.buildDirectory.dir('module'))
     archiveFileName = "bx-xtdb-${version}.zip"
     destinationDirectory = layout.buildDirectory.dir('distributions')
 }
+
 tasks.register('moduleChecksum') {
     dependsOn moduleZip
     def archive = tasks.named('moduleZip', Zip).flatMap { it.archiveFile }
@@ -71,7 +74,9 @@ tasks.register('moduleChecksum') {
         checksum.get().asFile.text = "${java.util.HexFormat.of().formatHex(digest.digest())}  ${archive.get().asFile.name}\n"
     }
 }
+
 tasks.named('assemble') { dependsOn moduleChecksum }
+
 test { useJUnitPlatform() }
 
 tasks.register('prepareConsumer', Sync) {
@@ -79,6 +84,7 @@ tasks.register('prepareConsumer', Sync) {
     from({ zipTree(tasks.moduleZip.archiveFile.get().asFile) })
     into layout.buildDirectory.dir('consumer/modules/bx-xtdb')
 }
+
 tasks.register('consumerTest', JavaExec) {
     dependsOn prepareConsumer
     // Only the self-contained BoxLang runtime is visible outside the installed module.
@@ -89,6 +95,7 @@ tasks.register('consumerTest', JavaExec) {
         '--bx-config', file('src/test/bx/boxlang.json').absolutePath,
         file('src/test/bx/Smoke.bxs').absolutePath
 }
+
 tasks.register('runtimeConsumerTest', JavaExec) {
     dependsOn prepareConsumer
     classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
@@ -98,6 +105,7 @@ tasks.register('runtimeConsumerTest', JavaExec) {
         '--bx-config', file('src/test/runtime/boxlang.json').absolutePath,
         file('src/test/runtime/Smoke.bxs').absolutePath
 }
+
 tasks.register('exampleTest', JavaExec) {
     dependsOn prepareConsumer
     classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
@@ -107,6 +115,7 @@ tasks.register('exampleTest', JavaExec) {
         '--bx-config', file('src/test/bx/boxlang.json').absolutePath,
         file('examples/Temporal.bxs').absolutePath
 }
+
 tasks.register('testBox', JavaExec) {
     dependsOn prepareConsumer
     classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
