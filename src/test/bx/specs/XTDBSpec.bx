@@ -44,6 +44,9 @@ class extends="testbox.system.BaseSpec" {
                 expect(queryExecute("SELECT happened FROM bxxtdb_records WHERE _id = ?", [id & "-copy"])
                     .happened[1].getWrapped().toString()).toBe(timestamp.toString());
                 expect(isNull(doc["Name"][2])).toBeTrue();
+                var plain = queryExecute("SELECT {nested: [TRUE, NULL]} AS document");
+                expect(plain.document[1].nested[1]).toBeTrue();
+                expect(isNull(plain.document[1].nested[2])).toBeTrue();
             });
 
             it("preserves decimal precision, binary data and UUID values", () => {
@@ -63,7 +66,8 @@ class extends="testbox.system.BaseSpec" {
                     queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id, "first"]);
                     queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id & "-second", "second"]);
                 }
-                expect(queryExecute("SELECT * FROM bxxtdb_records WHERE _id IN (?, ?)", [id, id & "-second"]).recordCount).toBe(2);
+                expect(queryExecute("SELECT * FROM bxxtdb_records WHERE _id IN (?, ?)",
+                    [id, id & "-second"], {datasource: "xtdbReader"}).recordCount).toBe(2);
                 bx:transaction {
                     queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id & "-rollback", "discard"]);
                     bx:transaction action="rollback";

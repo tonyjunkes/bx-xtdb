@@ -106,6 +106,16 @@ tasks.register('runtimeConsumerTest', JavaExec) {
         file('src/test/runtime/Smoke.bxs').absolutePath
 }
 
+tasks.register('exampleTest', JavaExec) {
+    dependsOn prepareConsumer
+    classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
+    mainClass = 'ortus.boxlang.runtime.BoxRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args '--bx-home', file('build/example/home').absolutePath,
+        '--bx-config', file('src/test/bx/boxlang.json').absolutePath,
+        file('examples/Temporal.bxs').absolutePath
+}
+
 tasks.register('testBox', JavaExec) {
     dependsOn prepareConsumer
     classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }

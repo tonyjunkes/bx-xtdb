@@ -1,0 +1,10 @@
+class {
+    this.name = "bxxtdb-examples";
+    this.datasources.xtdb = {
+        driver: "xtdb",
+        connectionString: getSystemSetting("XTDB_JDBC_URL", "jdbc:xtdb://localhost:5432/xtdb"),
+        username: getSystemSetting("XTDB_USER", "xtdb"),
+        password: getSystemSetting("XTDB_PASSWORD", "xtdb")
+    };
+    this.datasource = "xtdb";
+}
