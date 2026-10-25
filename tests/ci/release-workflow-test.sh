@@ -31,7 +31,7 @@ curl() {
     shift
   done
   if [[ "$REGISTRY_PUBLISHED" == true ]]; then
-    printf '{"error":false,"data":{"versions":[{"version":"0.1.0"}]}}' > "$output"
+    printf '{"error":false,"data":{"versions":[{"version":"%s"}]}}' "$VERSION" > "$output"
   else
     printf '{"error":false,"data":{"versions":[]}}' > "$output"
   fi
@@ -43,7 +43,7 @@ gh() {
     'release list')
       if [[ "$GH_FAILURE" == true ]]; then return 1; fi
       if [[ "$RELEASE_EXISTS" == true ]]; then
-        printf '[{"tagName":"0.1.0","isDraft":%s}]' "$RELEASE_DRAFT"
+        printf '[{"tagName":"%s","isDraft":%s}]' "$VERSION" "$RELEASE_DRAFT"
       else
         echo '[]'
       fi
@@ -85,16 +85,21 @@ setup_case() {
   export RUNNER_TEMP="$GITHUB_WORKSPACE/tmp" GITHUB_OUTPUT="$GITHUB_WORKSPACE/output"
   export COMMAND_LOG="$GITHUB_WORKSPACE/commands"
   export GITHUB_REF=refs/heads/main GITHUB_SHA=head GH_REPO=tonyjunkes/bx-xtdb
-  export VERSION=0.1.0 SLUG=bx-xtdb ARCHIVE=bx-xtdb-0.1.0.zip FORGEBOX_API_TOKEN=fixture
+  # Keep fixtures independent of the package under development. A deliberately
+  # different version also catches accidental reuse of the real package metadata.
+  export VERSION=9.8.7 SLUG=bx-xtdb FORGEBOX_API_TOKEN=fixture
+  export ARCHIVE="$SLUG-$VERSION.zip"
   export TAG='' REGISTRY_STATUS=404 REGISTRY_PUBLISHED=false GH_FAILURE=false
   export RELEASE_EXISTS=false RELEASE_DRAFT=false ASSETS=none CHANGED_ASSET=false
   mkdir -p "$RUNNER_TEMP" "$GITHUB_WORKSPACE/build/distributions" \
     "$GITHUB_WORKSPACE/package/libs" "$GITHUB_WORKSPACE/src/main/bx"
-  cp "$root/box.json" "$GITHUB_WORKSPACE/box.json"
-  cp "$root/src/main/bx/ModuleConfig.bx" "$GITHUB_WORKSPACE/src/main/bx/ModuleConfig.bx"
+  jq -n --arg slug "$SLUG" --arg version "$VERSION" \
+    --arg location "https://github.com/$GH_REPO/releases/download/$VERSION/$ARCHIVE" \
+    '{slug: $slug, version: $version, location: $location}' > "$GITHUB_WORKSPACE/box.json"
+  printf 'class {\n    this.version = "%s";\n}\n' "$VERSION" > "$GITHUB_WORKSPACE/src/main/bx/ModuleConfig.bx"
   cp "$GITHUB_WORKSPACE/box.json" "$GITHUB_WORKSPACE/package/box.json"
   cp "$GITHUB_WORKSPACE/src/main/bx/ModuleConfig.bx" "$GITHUB_WORKSPACE/package/ModuleConfig.bx"
-  printf fixture > "$GITHUB_WORKSPACE/package/libs/bx-xtdb-0.1.0.jar"
+  printf fixture > "$GITHUB_WORKSPACE/package/libs/$SLUG-$VERSION.jar"
   (cd "$GITHUB_WORKSPACE/package" && zip -qr "$GITHUB_WORKSPACE/build/distributions/$ARCHIVE" .)
   (cd "$GITHUB_WORKSPACE/build/distributions" && sha256sum "$ARCHIVE" > "$ARCHIVE.sha256")
   : > "$GITHUB_OUTPUT"
@@ -118,9 +123,9 @@ step release-github
 export PACKAGE_DIR
 PACKAGE_DIR="$(sed -n 's/^package-dir=//p' "$GITHUB_OUTPUT")"
 step release-forgebox
-grep -q '^git push origin refs/tags/0.1.0$' "$COMMAND_LOG"
+grep -Fxq "git push origin refs/tags/$VERSION" "$COMMAND_LOG"
 [[ "$(grep -c '^gh release upload ' "$COMMAND_LOG")" == 2 ]]
-grep -q '^gh release edit 0.1.0 --draft=false$' "$COMMAND_LOG"
+grep -Fxq "gh release edit $VERSION --draft=false" "$COMMAND_LOG"
 grep -q '^box forgebox publish$' "$COMMAND_LOG"
 pass 'first publication creates tag, assets, and ForgeBox entry'
 
