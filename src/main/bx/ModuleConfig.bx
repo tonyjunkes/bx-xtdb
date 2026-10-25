@@ -1,0 +1,6 @@
+class {
+    this.version = "0.1.0";
+    this.mapping = "bxxtdb";
+    this.author = "Tony Junkes";
+    this.description = "Native BoxLang datasource support for XTDB";
+}

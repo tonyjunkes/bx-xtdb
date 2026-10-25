@@ -1,0 +1,56 @@
+{
+    "name": "BX XTDB",
+    "version": "0.1.0",
+    "slug": "bx-xtdb",
+    "type": "boxlang-modules",
+    "author": "Tony Junkes",
+    "shortDescription": "Native BoxLang datasource support for XTDB.",
+    "description": "Use XTDB through BoxLang datasources, queries, and transactions with the official XTDB JDBC driver.",
+    "homepage": "https://github.com/tonyjunkes/bx-xtdb",
+    "documentation": "https://github.com/tonyjunkes/bx-xtdb",
+    "bugs": "https://github.com/tonyjunkes/bx-xtdb/issues",
+    "repository": {
+        "type": "git",
+        "URL": "https://github.com/tonyjunkes/bx-xtdb"
+    },
+    "location": "https://github.com/tonyjunkes/bx-xtdb/releases/download/0.1.0/bx-xtdb-0.1.0.zip",
+    "boxlang": {
+        "minimumVersion": "1.18.0",
+        "moduleName": "bxxtdb"
+    },
+    "license": [
+        {
+            "type": "MIT",
+            "URL": "https://opensource.org/licenses/MIT"
+        }
+    ],
+    "keywords": [
+        "boxlang",
+        "xtdb",
+        "jdbc",
+        "bitemporal"
+    ],
+    "devDependencies": {
+        "testbox": "7.2.0+21",
+        "bx-postgresql": "1.2.0+4"
+    },
+    "installPaths": {
+        "testbox": "testbox/",
+        "bx-postgresql": "build/consumer/modules/bx-postgresql/"
+    },
+    "scripts": {
+        "test": "!./gradlew testBox"
+    },
+    "ignore": [
+        "**/.*",
+        "src/**",
+        "tests/**",
+        "scripts/**",
+        "gradle/**",
+        "gradlew*",
+        "*.gradle",
+        "gradle.properties",
+        "testbox/**",
+        "build/**"
+    ]
+}

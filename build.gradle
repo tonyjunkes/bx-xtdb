@@ -1,0 +1,114 @@
+plugins { id 'java-library' }
+
+group = 'modules.bxxtdb'
+repositories { mavenCentral() }
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+
+dependencies {
+    compileOnly "io.boxlang:boxlang:${boxlangVersion}"
+    implementation "com.xtdb:xtdb-api:${xtdbVersion}"
+    testImplementation "io.boxlang:boxlang:${boxlangVersion}"
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.14.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+tasks.register('verifyModuleMetadata') {
+    inputs.files('box.json', 'gradle.properties', 'src/main/bx/ModuleConfig.bx')
+    doLast {
+        def manifest = new groovy.json.JsonSlurper().parse(file('box.json'))
+        def descriptor = file('src/main/bx/ModuleConfig.bx').text =~ /this\.version\s*=\s*"([^"]+)"/
+        if (!(version.toString() ==~ /\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?/) ||
+            manifest.version != version.toString() || descriptor.count != 1 || descriptor[0][1] != version.toString())
+            throw new GradleException('box.json, gradle.properties, and ModuleConfig.bx must have the same semantic version')
+        if (manifest.slug != 'bx-xtdb' || manifest.boxlang.moduleName != 'bxxtdb' || manifest.boxlang.minimumVersion != boxlangVersion)
+            throw new GradleException('Invalid module identity or minimum BoxLang version')
+        if (manifest.location != "https://github.com/tonyjunkes/bx-xtdb/releases/download/${version}/bx-xtdb-${version}.zip")
+            throw new GradleException('Package location must identify the compiled release ZIP')
+    }
+}
+
+tasks.register('createModuleStructure', Sync) {
+    dependsOn jar, verifyModuleMetadata
+    into layout.buildDirectory.dir('module')
+    from(tasks.jar) { into 'libs' }
+    from(configurations.runtimeClasspath) { into 'libs' }
+    from('src/main/bx')
+    from('docs') { into 'docs' }
+    from('examples') { into 'examples' }
+    from('.') { include 'box.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'THIRD-PARTY-NOTICES.md' }
+}
+
+tasks.register('moduleZip', Zip) {
+    dependsOn createModuleStructure
+    from(layout.buildDirectory.dir('module'))
+    archiveFileName = "bx-xtdb-${version}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+}
+
+tasks.register('moduleChecksum') {
+    dependsOn moduleZip
+    def archive = tasks.named('moduleZip', Zip).flatMap { it.archiveFile }
+    def checksum = layout.buildDirectory.file("distributions/bx-xtdb-${version}.zip.sha256")
+    inputs.file(archive)
+    outputs.file(checksum)
+    doLast {
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        archive.get().asFile.withInputStream {
+            new java.security.DigestInputStream(it, digest).transferTo(java.io.OutputStream.nullOutputStream())
+        }
+        checksum.get().asFile.text = "${java.util.HexFormat.of().formatHex(digest.digest())}  ${archive.get().asFile.name}\n"
+    }
+}
+
+tasks.named('assemble') { dependsOn moduleChecksum }
+
+test { useJUnitPlatform() }
+
+tasks.register('prepareConsumer', Sync) {
+    dependsOn moduleZip
+    from({ zipTree(tasks.moduleZip.archiveFile.get().asFile) })
+    into layout.buildDirectory.dir('consumer/modules/bx-xtdb')
+}
+
+tasks.register('consumerTest', JavaExec) {
+    dependsOn prepareConsumer
+    // Only the self-contained BoxLang runtime is visible outside the installed module.
+    classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
+    mainClass = 'ortus.boxlang.runtime.BoxRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args '--bx-home', file('build/consumer/home').absolutePath,
+        '--bx-config', file('src/test/bx/boxlang.json').absolutePath,
+        file('src/test/bx/Smoke.bxs').absolutePath
+}
+
+tasks.register('testBox', JavaExec) {
+    dependsOn prepareConsumer
+    classpath = configurations.testRuntimeClasspath.filter { it.name.startsWith('boxlang-') }
+    mainClass = 'ortus.boxlang.runtime.BoxRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args '--bx-home', file('build/consumer/home').absolutePath,
+        '--bx-config', file('src/test/bx/boxlang.json').absolutePath,
+        file('testbox/system/runners/BoxLangRunner.bx').absolutePath,
+        '--directory=src.test.bx.specs', '--stream', '--write-report=true', '--write-json-report=true',
+        "--reportpath=${file('build/testbox').absolutePath}", '--properties-summary=false', '--stacktrace=short'
+    doFirst {
+        if (!file('testbox/system/runners/BoxLangRunner.bx').exists()) throw new GradleException('Run box install before testBox')
+        delete layout.buildDirectory.dir('testbox')
+    }
+    doLast {
+        def report = new groovy.json.JsonSlurper().parse(file('build/testbox/report.json'))
+        if (report.totalFail != 0 || report.totalError != 0 || report.totalPass <= 0)
+            throw new GradleException('TestBox reported failures or no passing tests')
+    }
+}
