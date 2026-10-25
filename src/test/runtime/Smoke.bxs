@@ -1,0 +1,5 @@
+bx:query name="rows" {
+    writeOutput("SELECT 42 AS answer");
+}
+if (rows.answer[1] != 42) throw "Runtime datasource/query component failed";
+println("Runtime datasource and query component passed");

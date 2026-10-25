@@ -1,0 +1,127 @@
+class extends="testbox.system.BaseSpec" {
+    function beforeAll() {
+        var app = new src.test.bx.Application();
+        bx:application action="update" name=app.name datasources=app.datasources datasource=app.datasource;
+    }
+
+    function run() {
+        describe("Installed XTDB datasource", () => {
+            beforeEach(() => { variables.id = createUUID(); });
+
+            it("executes CRUD with positional and named parameters and query return types", () => {
+                queryExecute("INSERT INTO bxxtdb_records (_id, name, age) VALUES (?, ?, ?)",
+                    [id, "Tony", {value: 42, sqltype: "integer"}]);
+                var rows = queryExecute("SELECT name, age FROM bxxtdb_records WHERE _id = :id", {id: id});
+                expect(rows.recordCount).toBe(1);
+                expect(rows.name[1]).toBe("Tony");
+                expect(rows.age[1]).toBe(42);
+                queryExecute("UPDATE bxxtdb_records SET name = ? WHERE _id = ?", ["Updated", id]);
+                rows = queryExecute("SELECT name FROM bxxtdb_records WHERE _id = ?", [id], {returntype: "array"});
+                expect(rows[1].name).toBe("Updated");
+                queryExecute("DELETE FROM bxxtdb_records WHERE _id = ?", [id]);
+                expect(queryExecute("SELECT * FROM bxxtdb_records WHERE _id = ?", [id]).recordCount).toBe(0);
+            });
+
+            it("round trips nested native collections, nulls, key case and zoned timestamps", () => {
+                var doc = structNew("linked_case_sensitive");
+                doc["Name"] = [true, null, {amount: 1.25}];
+                doc["name"] = "different";
+                var timestamp = createObject("java", "java.time.ZonedDateTime")
+                    .parse("2026-01-02T03:04:05.123456+01:00[Europe/Paris]");
+                queryExecute("INSERT INTO bxxtdb_records (_id, doc, happened, active) VALUES (?, ?, ?, ?)",
+                    [id, {value: doc, sqltype: "other"}, {value: timestamp, sqltype: "other"}, {value: true, sqltype: "boolean"}]);
+                var rows = queryExecute("SELECT doc, happened, active FROM bxxtdb_records WHERE _id = ?", [id]);
+                var actual = rows.doc[1];
+                expect(structCount(actual)).toBe(2);
+                expect(actual["Name"][1]).toBeTrue();
+                expect(isNull(actual["Name"][2])).toBeTrue();
+                expect(actual["Name"][3].amount).toBe(1.25);
+                expect(actual["name"]).toBe("different");
+                expect(rows.happened[1].getWrapped().toString()).toBe(timestamp.toString());
+                expect(rows.active[1]).toBeTrue();
+                queryExecute("INSERT INTO bxxtdb_records (_id, happened) VALUES (?, ?)",
+                    [id & "-copy", {value: rows.happened[1], sqltype: "other"}]);
+                expect(queryExecute("SELECT happened FROM bxxtdb_records WHERE _id = ?", [id & "-copy"])
+                    .happened[1].getWrapped().toString()).toBe(timestamp.toString());
+                expect(isNull(doc["Name"][2])).toBeTrue();
+            });
+
+            it("preserves decimal precision, binary data and UUID values", () => {
+                var amount = createObject("java", "java.math.BigDecimal").init("12345678901234567890.123456789");
+                var uuid = createObject("java", "java.util.UUID").randomUUID();
+                var bytes = binaryDecode("AAH/", "base64");
+                queryExecute("INSERT INTO bxxtdb_records (_id, amount, payload, identifier) VALUES (?, ?, ?, ?)",
+                    [id, {value: amount, sqltype: "decimal"}, {value: bytes, sqltype: "binary"}, {value: uuid, sqltype: "other"}]);
+                var rows = queryExecute("SELECT amount, payload, identifier FROM bxxtdb_records WHERE _id = ?", [id]);
+                expect(rows.amount[1].toString()).toBe(amount.toString());
+                expect(toBase64(rows.payload[1])).toBe("AAH/");
+                expect(rows.identifier[1].toString()).toBe(uuid.toString());
+            });
+
+            it("commits atomic writes and rolls back explicitly", () => {
+                bx:transaction {
+                    queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id, "first"]);
+                    queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id & "-second", "second"]);
+                }
+                expect(queryExecute("SELECT * FROM bxxtdb_records WHERE _id IN (?, ?)", [id, id & "-second"]).recordCount).toBe(2);
+                bx:transaction {
+                    queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id & "-rollback", "discard"]);
+                    bx:transaction action="rollback";
+                }
+                expect(queryExecute("SELECT * FROM bxxtdb_records WHERE _id = ?", [id & "-rollback"]).recordCount).toBe(0);
+            });
+
+            it("aborts failed assertions and permits subsequent queries", () => {
+                expect(() => {
+                    bx:transaction {
+                        queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id, "discard"]);
+                        queryExecute("ASSERT FALSE, 'bxxtdb invariant failed'");
+                    }
+                }).toThrow();
+                expect(queryExecute("SELECT * FROM bxxtdb_records WHERE _id = ?", [id]).recordCount).toBe(0);
+                expect(queryExecute("SELECT 1 AS answer").answer[1]).toBe(1);
+            });
+
+            it("rejects mixing queries and writes without poisoning the pool", () => {
+                expect(() => {
+                    bx:transaction {
+                        queryExecute("INSERT INTO bxxtdb_records (_id, name) VALUES (?, ?)", [id, "discard"]);
+                        queryExecute("SELECT 1 AS answer");
+                    }
+                }).toThrow();
+                expect(queryExecute("SELECT 1 AS answer").answer[1]).toBe(1);
+            });
+
+            it("supports read-only transaction blocks", () => {
+                bx:transaction {
+                    queryExecute("SET TRANSACTION READ ONLY");
+                    expect(queryExecute("SELECT 1 AS answer").answer[1]).toBe(1);
+                    expect(queryExecute("SELECT 2 AS answer").answer[1]).toBe(2);
+                }
+            });
+
+            it("queries valid time and system history with bound temporal predicates", () => {
+                queryExecute("INSERT INTO bxxtdb_records (_id, name, _valid_from, _valid_to) VALUES (?, ?, TIMESTAMP '2020-01-01Z', TIMESTAMP '2021-01-01Z')", [id, "original"]);
+                var original = queryExecute("SELECT _system_from AS recorded FROM bxxtdb_records FOR ALL VALID_TIME WHERE _id = ?", [id]).recorded[1];
+                queryExecute("UPDATE bxxtdb_records FOR VALID_TIME FROM TIMESTAMP '2020-01-01Z' TO TIMESTAMP '2021-01-01Z' SET name = ? WHERE _id = ?", ["corrected", id]);
+                var asOf = queryExecute("SELECT name FROM bxxtdb_records FOR VALID_TIME AS OF CAST(? AS TIMESTAMPTZ) WHERE _id = ?", ["2020-06-01T00:00:00Z", id]);
+                expect(asOf.name[1]).toBe("corrected");
+                var before = queryExecute("SELECT name FROM bxxtdb_records FOR SYSTEM_TIME AS OF CAST(? AS TIMESTAMPTZ) FOR VALID_TIME AS OF TIMESTAMP '2020-06-01Z' WHERE _id = ?",
+                    [{value: original, sqltype: "other"}, id]);
+                expect(before.name[1]).toBe("original");
+                expect(queryExecute("SELECT name FROM bxxtdb_records FOR ALL SYSTEM_TIME FOR ALL VALID_TIME WHERE _id = ?", [id]).recordCount).toBeGTE(2);
+            });
+
+            it("preserves database diagnostics", () => {
+                try {
+                    queryExecute("SELECT * FROM bxxtdb_table_that_does_not_exist");
+                    fail("Expected an unknown-table database exception");
+                } catch (database error) {
+                    expect(error.message).toInclude("bxxtdb_table_that_does_not_exist");
+                    // BoxLang 1.18 preserves the original SQLException as the cause.
+                    expect(len(error.cause.getSQLState())).toBeGT(0);
+                }
+            });
+        });
+    }
+}

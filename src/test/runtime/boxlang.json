@@ -1,0 +1,12 @@
+{
+    "modulesDirectory": ["build/consumer/modules"],
+    "defaultDatasource": "xtdb",
+    "datasources": {
+        "xtdb": {
+            "driver": "xtdb",
+            "connectionString": "${env.XTDB_JDBC_URL:jdbc:xtdb://localhost:5432/xtdb}",
+            "username": "${env.XTDB_USER:xtdb}",
+            "password": "${env.XTDB_PASSWORD:xtdb}"
+        }
+    }
+}
