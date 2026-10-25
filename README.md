@@ -21,6 +21,7 @@ box install ID=/absolute/path/to/bx-xtdb/build/distributions/bx-xtdb-0.1.0.zip d
 
 The distribution contains the module and its Java dependencies under `libs/`.
 The source checkout itself is not the compiled installable module.
+On Windows PowerShell, use `.\gradlew.bat build` in place of `./gradlew build`.
 
 ## Configure a datasource
 
@@ -127,15 +128,22 @@ BoxLang 1.18; the runtime's top-level `sqlstate` field can be empty.
 
 ## Development and verification
 
-Install a JDK 21, CommandBox, and a Docker-compatible runtime. On macOS:
+Install the following prerequisites for your operating system:
 
-```sh
-brew install openjdk@21 docker colima
-export JAVA_HOME="$(brew --prefix openjdk@21)/libexec/openjdk.jdk/Contents/Home"
-colima start --cpu 4 --memory 6
-```
+- A **JDK 21**, such as [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21).
+  Set `JAVA_HOME` to its installation directory and add its `bin` directory to `PATH`.
+- [CommandBox](https://commandbox.ortusbooks.com/setup/installation), with `box` on `PATH`.
+- A running Docker-compatible runtime for the local test node.
+  [Docker's installation guide](https://docs.docker.com/engine/install/) links to
+  Linux Engine packages and Docker Desktop for Windows, macOS, and Linux.
+- **Bash and curl** for the container helper script.
 
-Then, from this checkout:
+Run the following commands in Bash on Linux or macOS. On Windows, use
+[WSL 2 with Docker Desktop integration](https://docs.docker.com/desktop/features/wsl/),
+install the JDK and CommandBox inside your WSL distribution, and run the same
+commands there. Start your container runtime before starting the test node.
+
+From this checkout:
 
 ```sh
 box install
@@ -144,16 +152,29 @@ bash scripts/xtdb.sh start
 bash scripts/xtdb.sh stop
 ```
 
+For native Windows development against an existing XTDB node, run the following
+in PowerShell after configuring the endpoint variables described below:
+
+```powershell
+box install
+.\gradlew.bat build consumerTest runtimeConsumerTest testBox exampleTest
+```
+
+The Gradle wrapper supplies Gradle; a separate Gradle installation is unnecessary.
+The container helper requires Bash and does not run directly in PowerShell.
+
 The disposable container binds only to localhost and uses the development
 password `xtdb`. Override `XTDB_PASSWORD`, `XTDB_PORT`, or `XTDB_HEALTH_PORT` if
 needed. Readiness is bounded to 120 seconds; inspect logs with
-`bash scripts/xtdb.sh logs`. Stop the container after testing. Colima can be
-stopped separately with `colima stop`.
+`bash scripts/xtdb.sh logs`. Stop the container after testing. If you use a
+separate container VM, stop it through your runtime when you finish.
 
 To use an existing disposable development database, omit the container commands
 and set `XTDB_JDBC_URL`, `XTDB_USER`, and `XTDB_PASSWORD`. A custom published
 container port also requires a matching `XTDB_JDBC_URL`. Tests and examples
 write uniquely identified documents into `bxxtdb_*` tables.
+In Bash, set endpoint variables with `export NAME=value`; in PowerShell, use
+`$env:NAME = "value"`.
 
 JUnit covers adapter-owned conversion logic. TestBox exercises the installed
 module against real XTDB, with bx-postgresql present to check classloader
